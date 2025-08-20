@@ -1,0 +1,655 @@
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Document Search & Chat - RAG Chatbot</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        'inter': ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        primary: '#6366F1',
+                        secondary: '#8B5CF6',
+                        accent: '#10B981',
+                        warning: '#F59E0B',
+                        dark: '#1F2937',
+                        'dark-lighter': '#374151',
+                        'glass-white': 'rgba(255, 255, 255, 0.1)',
+                        'glass-dark': 'rgba(0, 0, 0, 0.1)',
+                    },
+                    animation: {
+                        'typing': 'typing 1.5s steps(40, end) infinite',
+                        'float': 'float 6s ease-in-out infinite',
+                        'pulse-soft': 'pulse-soft 2s infinite',
+                        'slide-up': 'slideUp 0.3s ease-out',
+                    },
+                    keyframes: {
+                        typing: {
+                            'from': { width: '0' },
+                            'to': { width: '100%' }
+                        },
+                        float: {
+                            '0%, 100%': { transform: 'translateY(0px)' },
+                            '50%': { transform: 'translateY(-10px)' }
+                        },
+                        'pulse-soft': {
+                            '0%, 100%': { opacity: 1 },
+                            '50%': { opacity: 0.7 }
+                        },
+                        slideUp: {
+                            'from': { transform: 'translateY(20px)', opacity: '0' },
+                            'to': { transform: 'translateY(0)', opacity: '1' }
+                        }
+                    },
+                    backdropBlur: {
+                        xs: '2px',
+                    }
+                }
+            }
+        };
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        .glass-morphism {
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .glass-morphism-dark {
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        .text-gradient {
+            background: linear-gradient(135deg, #6366F1 0%, #8B5CF6 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .bg-gradient-primary {
+            background: linear-gradient(135deg, #6366F1 0%, #8B5CF6 100%);
+        }
+        .bg-gradient-secondary {
+            background: linear-gradient(135deg, #10B981 0%, #06B6D4 100%);
+        }
+        .chat-bubble-user {
+            background: linear-gradient(135deg, #6366F1 0%, #8B5CF6 100%);
+        }
+        .chat-bubble-ai {
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.05) 100%);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .dark .chat-bubble-ai {
+            background: linear-gradient(135deg, rgba(55, 65, 81, 0.8) 0%, rgba(31, 41, 55, 0.6) 100%);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        .typing-indicator::after {
+            content: '|';
+            animation: blink 1s infinite;
+        }
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0; }
+        }
+        .drag-area {
+            border: 2px dashed #6366F1;
+            transition: all 0.3s ease;
+        }
+        .drag-area.dragover {
+            border-color: #8B5CF6;
+            background: rgba(139, 92, 246, 0.1);
+            transform: scale(1.02);
+        }
+        .file-item {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .file-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+        }
+        .btn-3d {
+            transform: perspective(1000px) rotateX(0deg);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .btn-3d:hover {
+            transform: perspective(1000px) rotateX(-5deg) scale(1.05);
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.2);
+        }
+        .card-3d {
+            transform: perspective(1000px) rotateX(0deg) rotateY(0deg);
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .card-3d:hover {
+            transform: perspective(1000px) rotateX(2deg) rotateY(-2deg) scale(1.02);
+        }
+    </style>
+</head>
+<body class="font-inter bg-gray-50 dark:bg-gray-900 transition-colors duration-300">
+    <!-- Background Elements -->
+    <div class="fixed inset-0 overflow-hidden pointer-events-none">
+        <div class="absolute -top-40 -right-40 w-80 h-80 bg-gradient-to-br from-primary/20 to-secondary/20 rounded-full blur-3xl animate-float"></div>
+        <div class="absolute -bottom-40 -left-40 w-80 h-80 bg-gradient-to-br from-accent/20 to-warning/20 rounded-full blur-3xl animate-float" style="animation-delay: -3s;"></div>
+        <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-gradient-to-br from-secondary/10 to-primary/10 rounded-full blur-3xl animate-float" style="animation-delay: -1.5s;"></div>
+    </div>
+
+    <!-- Navigation Header -->
+    <nav class="fixed top-0 left-0 right-0 z-50 glass-morphism bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <div class="flex items-center space-x-3">
+                    <div class="w-8 h-8 bg-gradient-primary rounded-lg flex items-center justify-center">
+                        <i class="fas fa-brain text-white text-sm"></i>
+                    </div>
+                    <h1 class="text-xl font-bold text-gradient">AI DocChat</h1>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <!-- Dark Mode Toggle -->
+                    <button id="darkModeToggle" class="relative inline-flex h-6 w-11 items-center rounded-full bg-gray-200 dark:bg-gray-700 transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 btn-3d">
+                        <span class="sr-only">Toggle dark mode</span>
+                        <span class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform dark:translate-x-6" id="toggleIndicator">
+                            <i class="fas fa-sun text-xs text-yellow-500 dark:hidden flex items-center justify-center w-full h-full"></i>
+                            <i class="fas fa-moon text-xs text-blue-400 hidden dark:flex items-center justify-center w-full h-full"></i>
+                        </span>
+                    </button>
+                    <button class="btn-3d p-2 rounded-lg glass-morphism bg-white/20 dark:bg-gray-800/20 hover:bg-white/30 dark:hover:bg-gray-700/30 transition-all duration-300">
+                        <i class="fas fa-cog text-gray-600 dark:text-gray-300"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Container -->
+    <div class="flex min-h-screen pt-16">
+        <!-- Sidebar -->
+        <aside class="hidden lg:flex w-80 flex-col glass-morphism bg-white/60 dark:bg-gray-900/60 backdrop-blur-xl border-r border-white/20 dark:border-gray-800/20">
+            <div class="p-6 border-b border-white/20 dark:border-gray-800/20">
+                <h2 class="text-lg font-semibold text-gray-800 dark:text-white mb-4">Document Library</h2>
+                
+                <!-- Upload Area -->
+                <div class="drag-area p-6 rounded-xl glass-morphism bg-white/30 dark:bg-gray-800/30 text-center cursor-pointer card-3d" id="uploadArea">
+                    <div class="animate-float">
+                        <i class="fas fa-cloud-upload-alt text-3xl text-primary mb-3"></i>
+                        <p class="text-sm font-medium text-gray-700 dark:text-gray-200">Drop PDFs here or click to upload</p>
+                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Support for multiple files</p>
+                    </div>
+                    <input type="file" id="fileInput" multiple accept=".pdf" class="hidden">
+                </div>
+            </div>
+
+            <!-- File List -->
+            <div class="flex-1 overflow-y-auto p-6 space-y-3" id="fileList">
+                <!-- Sample uploaded files -->
+                <div class="file-item glass-morphism bg-white/40 dark:bg-gray-800/40 rounded-lg p-4 card-3d" data-mock="true">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-10 h-10 bg-red-500 rounded-lg flex items-center justify-center">
+                            <i class="fas fa-file-pdf text-white text-sm"></i>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <p class="text-sm font-medium text-gray-800 dark:text-white truncate">Research Paper.pdf</p>
+                            <p class="text-xs text-gray-500 dark:text-gray-400">2.4 MB • 45 pages</p>
+                        </div>
+                        <button class="text-gray-400 hover:text-red-500 transition-colors">
+                            <i class="fas fa-times text-xs"></i>
+                        </button>
+                    </div>
+                    <div class="mt-3">
+                        <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                            <div class="bg-gradient-secondary h-2 rounded-full" style="width: 100%"></div>
+                        </div>
+                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Processed • 127 chunks</p>
+                    </div>
+                </div>
+
+                <div class="file-item glass-morphism bg-white/40 dark:bg-gray-800/40 rounded-lg p-4 card-3d" data-mock="true">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-10 h-10 bg-red-500 rounded-lg flex items-center justify-center">
+                            <i class="fas fa-file-pdf text-white text-sm"></i>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <p class="text-sm font-medium text-gray-800 dark:text-white truncate">Manual Guide.pdf</p>
+                            <p class="text-xs text-gray-500 dark:text-gray-400">1.8 MB • 32 pages</p>
+                        </div>
+                        <button class="text-gray-400 hover:text-red-500 transition-colors">
+                            <i class="fas fa-times text-xs"></i>
+                        </button>
+                    </div>
+                    <div class="mt-3">
+                        <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                            <div class="bg-gradient-secondary h-2 rounded-full animate-pulse" style="width: 65%"></div>
+                        </div>
+                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Processing...</p>
+                    </div>
+                </div>
+
+                <div class="file-item glass-morphism bg-white/40 dark:bg-gray-800/40 rounded-lg p-4 card-3d" data-mock="true">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-10 h-10 bg-red-500 rounded-lg flex items-center justify-center">
+                            <i class="fas fa-file-pdf text-white text-sm"></i>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <p class="text-sm font-medium text-gray-800 dark:text-white truncate">Company Report.pdf</p>
+                            <p class="text-xs text-gray-500 dark:text-gray-400">3.2 MB • 78 pages</p>
+                        </div>
+                        <button class="text-gray-400 hover:text-red-500 transition-colors">
+                            <i class="fas fa-times text-xs"></i>
+                        </button>
+                    </div>
+                    <div class="mt-3">
+                        <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                            <div class="bg-gradient-secondary h-2 rounded-full" style="width: 100%"></div>
+                        </div>
+                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Processed • 203 chunks</p>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Chat Area -->
+        <main class="flex-1 flex flex-col lg:ml-0">
+            <!-- Chat Container -->
+            <div class="flex-1 flex flex-col max-w-4xl mx-auto w-full">
+                <!-- Welcome Section -->
+                <div class="p-6 text-center" id="welcomeSection">
+                    <div class="glass-morphism bg-white/60 dark:bg-gray-900/60 backdrop-blur-xl rounded-2xl p-8 mb-6 card-3d">
+                        <div class="animate-float mb-6">
+                            <!-- Professional workspace with AI elements -->
+                            <img src="https://images.unsplash.com/photo-1551434678-e076c223a692?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&h=400" alt="Professional workspace with modern technology" class="w-full h-48 object-cover rounded-xl mb-6 shadow-lg">
+                        </div>
+                        <h2 class="text-3xl font-bold text-gradient mb-4">AI-Powered Document Intelligence</h2>
+                        <p class="text-gray-600 dark:text-gray-300 text-lg mb-8">Upload your PDFs and chat with your documents using advanced AI technology. Get instant answers with source citations.</p>
+                        
+                        <!-- Feature Cards -->
+                        <div class="grid md:grid-cols-3 gap-6">
+                            <div class="glass-morphism bg-white/40 dark:bg-gray-800/40 p-6 rounded-xl card-3d">
+                                <div class="w-12 h-12 bg-gradient-primary rounded-lg flex items-center justify-center mb-4 mx-auto">
+                                    <i class="fas fa-upload text-white"></i>
+                                </div>
+                                <h3 class="font-semibold text-gray-800 dark:text-white mb-2">Smart Upload</h3>
+                                <p class="text-sm text-gray-600 dark:text-gray-300">Drag & drop multiple PDFs with automatic text extraction and chunking</p>
+                            </div>
+                            <div class="glass-morphism bg-white/40 dark:bg-gray-800/40 p-6 rounded-xl card-3d">
+                                <div class="w-12 h-12 bg-gradient-secondary rounded-lg flex items-center justify-center mb-4 mx-auto">
+                                    <i class="fas fa-search text-white"></i>
+                                </div>
+                                <h3 class="font-semibold text-gray-800 dark:text-white mb-2">Semantic Search</h3>
+                                <p class="text-sm text-gray-600 dark:text-gray-300">Find relevant information using AI-powered semantic understanding</p>
+                            </div>
+                            <div class="glass-morphism bg-white/40 dark:bg-gray-800/40 p-6 rounded-xl card-3d">
+                                <div class="w-12 h-12 bg-gradient-to-r from-accent to-warning rounded-lg flex items-center justify-center mb-4 mx-auto">
+                                    <i class="fas fa-comments text-white"></i>
+                                </div>
+                                <h3 class="font-semibold text-gray-800 dark:text-white mb-2">Contextual Chat</h3>
+                                <p class="text-sm text-gray-600 dark:text-gray-300">Maintain conversation context with source citations and highlights</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Chat Messages -->
+                <div class="flex-1 overflow-y-auto px-6" id="chatContainer">
+                    <div class="space-y-4 pb-6" id="messagesContainer">
+                        <!-- Sample conversation -->
+                        <div class="flex items-start space-x-3 animate-slide-up" data-mock="true">
+                            <div class="w-8 h-8 rounded-full bg-gradient-primary flex items-center justify-center flex-shrink-0">
+                                <i class="fas fa-user text-white text-sm"></i>
+                            </div>
+                            <div class="flex-1">
+                                <div class="chat-bubble-user p-4 rounded-2xl rounded-tl-md max-w-md text-white shadow-lg">
+                                    <p class="text-sm">What are the main findings in the research paper about AI ethics?</p>
+                                </div>
+                                <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">2 minutes ago</p>
+                            </div>
+                        </div>
+
+                        <div class="flex items-start space-x-3 animate-slide-up" data-mock="true">
+                            <div class="w-8 h-8 rounded-full bg-gradient-secondary flex items-center justify-center flex-shrink-0">
+                                <i class="fas fa-robot text-white text-sm"></i>
+                            </div>
+                            <div class="flex-1">
+                                <div class="chat-bubble-ai glass-morphism backdrop-blur-xl p-4 rounded-2xl rounded-tl-md max-w-2xl shadow-lg">
+                                    <div class="prose prose-sm dark:prose-invert">
+                                        <p class="mb-3">Based on the research paper you uploaded, here are the main findings regarding AI ethics:</p>
+                                        <ul class="text-sm space-y-1">
+                                            <li><strong>Algorithmic Bias:</strong> The study identifies significant bias in AI decision-making systems, particularly affecting marginalized communities.</li>
+                                            <li><strong>Transparency Requirements:</strong> There's a critical need for explainable AI systems that users can understand and audit.</li>
+                                            <li><strong>Data Privacy:</strong> Enhanced protection mechanisms are essential for preserving individual privacy in AI applications.</li>
+                                        </ul>
+                                        <div class="mt-4 p-3 bg-white/20 dark:bg-gray-800/30 rounded-lg border border-white/30">
+                                            <p class="text-xs text-gray-600 dark:text-gray-300 mb-2"><i class="fas fa-quote-left"></i> Source from Research Paper.pdf:</p>
+                                            <p class="text-sm italic">"The implementation of ethical AI frameworks requires a multi-stakeholder approach involving technologists, ethicists, and policymakers..."</p>
+                                            <p class="text-xs text-gray-500 dark:text-gray-400 mt-2">Page 23, Section 4.2</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Just now</p>
+                            </div>
+                        </div>
+
+                        <!-- Typing indicator (hidden by default) -->
+                        <div class="flex items-start space-x-3 hidden" id="typingIndicator">
+                            <div class="w-8 h-8 rounded-full bg-gradient-secondary flex items-center justify-center flex-shrink-0">
+                                <i class="fas fa-robot text-white text-sm"></i>
+                            </div>
+                            <div class="flex-1">
+                                <div class="chat-bubble-ai glass-morphism backdrop-blur-xl p-4 rounded-2xl rounded-tl-md max-w-md shadow-lg">
+                                    <div class="flex items-center space-x-1">
+                                        <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+                                        <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0.1s;"></div>
+                                        <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0.2s;"></div>
+                                        <span class="text-sm text-gray-500 ml-2">AI is thinking...</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Chat Input -->
+                <div class="p-6 border-t border-white/20 dark:border-gray-800/20">
+                    <div class="glass-morphism bg-white/60 dark:bg-gray-900/60 backdrop-blur-xl rounded-2xl p-4 card-3d">
+                        <div class="flex items-end space-x-4">
+                            <div class="flex-1">
+                                <textarea 
+                                    id="chatInput" 
+                                    placeholder="Ask anything about your documents..." 
+                                    class="w-full bg-transparent text-gray-800 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 resize-none focus:outline-none max-h-32"
+                                    rows="1"
+                                    style="min-height: 24px;"
+                                ></textarea>
+                            </div>
+                            <div class="flex items-center space-x-2">
+                                <button class="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors btn-3d" title="Attach file">
+                                    <i class="fas fa-paperclip"></i>
+                                </button>
+                                <button id="sendButton" class="btn-3d bg-gradient-primary text-white p-3 rounded-xl hover:shadow-lg transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed">
+                                    <i class="fas fa-paper-plane"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="flex items-center justify-between mt-3 text-xs text-gray-500 dark:text-gray-400">
+                            <div class="flex items-center space-x-4">
+                                <span><i class="fas fa-file-alt"></i> 3 documents loaded</span>
+                                <span><i class="fas fa-database"></i> 457 chunks indexed</span>
+                            </div>
+                            <span>Press Enter to send</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Mobile Sidebar Toggle -->
+    <button class="fixed bottom-6 left-6 lg:hidden btn-3d bg-gradient-primary text-white p-4 rounded-full shadow-lg z-50">
+        <i class="fas fa-bars"></i>
+    </button>
+
+    <!-- Loading Overlay -->
+    <div class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center hidden" id="loadingOverlay">
+        <div class="glass-morphism bg-white/90 dark:bg-gray-900/90 backdrop-blur-xl p-8 rounded-2xl text-center max-w-sm mx-4">
+            <div class="w-16 h-16 bg-gradient-primary rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
+                <i class="fas fa-brain text-white text-2xl"></i>
+            </div>
+            <h3 class="text-lg font-semibold text-gray-800 dark:text-white mb-2">Processing Document</h3>
+            <p class="text-sm text-gray-600 dark:text-gray-300 mb-4">Extracting text and creating embeddings...</p>
+            <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                <div class="bg-gradient-primary h-2 rounded-full animate-pulse" style="width: 65%"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Error Toast -->
+    <div class="fixed top-20 right-6 glass-morphism bg-red-500/90 backdrop-blur-xl text-white p-4 rounded-lg shadow-lg z-50 transform translate-x-full transition-transform duration-300 hidden" id="errorToast">
+        <div class="flex items-center space-x-3">
+            <i class="fas fa-exclamation-triangle"></i>
+            <span id="errorMessage">Something went wrong</span>
+            <button onclick="hideErrorToast()" class="ml-2">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- Success Toast -->
+    <div class="fixed top-20 right-6 glass-morphism bg-green-500/90 backdrop-blur-xl text-white p-4 rounded-lg shadow-lg z-50 transform translate-x-full transition-transform duration-300 hidden" id="successToast">
+        <div class="flex items-center space-x-3">
+            <i class="fas fa-check-circle"></i>
+            <span id="successMessage">Operation successful</span>
+            <button onclick="hideSuccessToast()" class="ml-2">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // TODO: Implement business logic, API calls, and state management
+        
+        (function() {
+            // Dark mode toggle functionality
+            const darkModeToggle = document.getElementById('darkModeToggle');
+            const toggleIndicator = document.getElementById('toggleIndicator');
+            let isDark = localStorage.getItem('darkMode') === 'true' || false;
+
+            function updateDarkMode() {
+                if (isDark) {
+                    document.documentElement.classList.add('dark');
+                    toggleIndicator.classList.add('translate-x-6');
+                } else {
+                    document.documentElement.classList.remove('dark');
+                    toggleIndicator.classList.remove('translate-x-6');
+                }
+                localStorage.setItem('darkMode', isDark.toString());
+            }
+
+            darkModeToggle.addEventListener('click', () => {
+                isDark = !isDark;
+                updateDarkMode();
+            });
+
+            // Initialize dark mode
+            updateDarkMode();
+
+            // File upload functionality
+            const uploadArea = document.getElementById('uploadArea');
+            const fileInput = document.getElementById('fileInput');
+
+            uploadArea.addEventListener('click', () => {
+                fileInput.click();
+            });
+
+            uploadArea.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                uploadArea.classList.add('dragover');
+            });
+
+            uploadArea.addEventListener('dragleave', () => {
+                uploadArea.classList.remove('dragover');
+            });
+
+            uploadArea.addEventListener('drop', (e) => {
+                e.preventDefault();
+                uploadArea.classList.remove('dragover');
+                const files = e.dataTransfer.files;
+                handleFiles(files);
+            });
+
+            fileInput.addEventListener('change', (e) => {
+                const files = e.target.files;
+                handleFiles(files);
+            });
+
+            function handleFiles(files) {
+                for (let file of files) {
+                    if (file.type === 'application/pdf') {
+                        // TODO: Implement PDF upload and processing
+                        console.log('Uploading PDF:', file.name);
+                        showLoadingOverlay();
+                        
+                        // Simulate upload process
+                        setTimeout(() => {
+                            hideLoadingOverlay();
+                            showSuccessToast('PDF uploaded and processed successfully!');
+                            addFileToList(file);
+                        }, 3000);
+                    } else {
+                        showErrorToast('Please upload only PDF files');
+                    }
+                }
+            }
+
+            function addFileToList(file) {
+                // TODO: Implement dynamic file list management
+                console.log('Adding file to list:', file.name);
+            }
+
+            // Chat functionality
+            const chatInput = document.getElementById('chatInput');
+            const sendButton = document.getElementById('sendButton');
+            const messagesContainer = document.getElementById('messagesContainer');
+            const typingIndicator = document.getElementById('typingIndicator');
+            const welcomeSection = document.getElementById('welcomeSection');
+
+            function autoResize() {
+                chatInput.style.height = 'auto';
+                chatInput.style.height = chatInput.scrollHeight + 'px';
+            }
+
+            chatInput.addEventListener('input', autoResize);
+            chatInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendMessage();
+                }
+            });
+
+            sendButton.addEventListener('click', sendMessage);
+
+            function sendMessage() {
+                const message = chatInput.value.trim();
+                if (!message) return;
+
+                // Hide welcome section on first message
+                welcomeSection.style.display = 'none';
+
+                // Add user message
+                addMessage(message, 'user');
+                chatInput.value = '';
+                chatInput.style.height = 'auto';
+
+                // Show typing indicator
+                showTypingIndicator();
+
+                // TODO: Implement API call to backend
+                // Simulate AI response
+                setTimeout(() => {
+                    hideTypingIndicator();
+                    const aiResponse = generateMockResponse(message);
+                    addMessage(aiResponse, 'ai');
+                }, 2000);
+            }
+
+            function addMessage(content, sender) {
+                const messageElement = document.createElement('div');
+                messageElement.className = 'flex items-start space-x-3 animate-slide-up';
+                
+                const isUser = sender === 'user';
+                const avatarClass = isUser ? 'bg-gradient-primary' : 'bg-gradient-secondary';
+                const bubbleClass = isUser ? 'chat-bubble-user' : 'chat-bubble-ai glass-morphism backdrop-blur-xl';
+                const icon = isUser ? 'fas fa-user' : 'fas fa-robot';
+
+                messageElement.innerHTML = `
+                    <div class="w-8 h-8 rounded-full ${avatarClass} flex items-center justify-center flex-shrink-0">
+                        <i class="${icon} text-white text-sm"></i>
+                    </div>
+                    <div class="flex-1">
+                        <div class="${bubbleClass} p-4 rounded-2xl rounded-tl-md max-w-2xl ${isUser ? 'text-white' : ''} shadow-lg">
+                            ${isUser ? `<p class="text-sm">${content}</p>` : content}
+                        </div>
+                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Just now</p>
+                    </div>
+                `;
+
+                messagesContainer.appendChild(messageElement);
+                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            }
+
+            function showTypingIndicator() {
+                typingIndicator.classList.remove('hidden');
+                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            }
+
+            function hideTypingIndicator() {
+                typingIndicator.classList.add('hidden');
+            }
+
+            function generateMockResponse(query) {
+                // TODO: Replace with actual API integration
+                const responses = [
+                    `<div class="prose prose-sm dark:prose-invert">
+                        <p>Based on your documents, I found relevant information about "${query}". Here are the key points:</p>
+                        <ul class="text-sm space-y-1">
+                            <li>Key finding from the analysis of your uploaded documents</li>
+                            <li>Additional insights derived from the content</li>
+                            <li>Contextual information that answers your query</li>
+                        </ul>
+                        <div class="mt-4 p-3 bg-white/20 dark:bg-gray-800/30 rounded-lg border border-white/30">
+                            <p class="text-xs text-gray-600 dark:text-gray-300 mb-2"><i class="fas fa-quote-left"></i> Source citation:</p>
+                            <p class="text-sm italic">"Relevant excerpt from your document that supports this answer..."</p>
+                            <p class="text-xs text-gray-500 dark:text-gray-400 mt-2">Document name, Page X</p>
+                        </div>
+                    </div>`,
+                ];
+                return responses[0];
+            }
+
+            // Utility functions for toasts and overlay
+            window.showLoadingOverlay = function() {
+                document.getElementById('loadingOverlay').classList.remove('hidden');
+            };
+
+            window.hideLoadingOverlay = function() {
+                document.getElementById('loadingOverlay').classList.add('hidden');
+            };
+
+            window.showErrorToast = function(message) {
+                const toast = document.getElementById('errorToast');
+                document.getElementById('errorMessage').textContent = message;
+                toast.classList.remove('hidden', 'translate-x-full');
+                setTimeout(() => {
+                    hideErrorToast();
+                }, 5000);
+            };
+
+            window.hideErrorToast = function() {
+                const toast = document.getElementById('errorToast');
+                toast.classList.add('translate-x-full');
+                setTimeout(() => {
+                    toast.classList.add('hidden');
+                }, 300);
+            };
+
+            window.showSuccessToast = function(message) {
+                const toast = document.getElementById('successToast');
+                document.getElementById('successMessage').textContent = message;
+                toast.classList.remove('hidden', 'translate-x-full');
+                setTimeout(() => {
+                    hideSuccessToast();
+                }, 5000);
+            };
+
+            window.hideSuccessToast = function() {
+                const toast = document.getElementById('successToast');
+                toast.classList.add('translate-x-full');
+                setTimeout(() => {
+                    toast.classList.add('hidden');
+                }, 300);
+            };
+        })();
+    </script>
+</body>
+</html>
