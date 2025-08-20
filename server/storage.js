@@ -68,22 +68,22 @@ export class MemStorage {
 
   async getDocumentChunks(documentId) {
     return Array.from(this.documentChunks.values())
-      .filter(chunk => chunk.documentId === documentId)
+      .filter((chunk) => chunk.documentId === documentId)
       .sort((a, b) => a.chunkIndex - b.chunkIndex);
   }
 
   async searchChunksByEmbedding(embedding, limit = 5) {
     // Simple cosine similarity for in-memory storage
     const chunksWithScores = Array.from(this.documentChunks.values())
-      .filter(chunk => chunk.embedding)
-      .map(chunk => ({
+      .filter((chunk) => chunk.embedding)
+      .map((chunk) => ({
         chunk,
-        score: this.cosineSimilarity(embedding, chunk.embedding)
+        score: this.cosineSimilarity(embedding, chunk.embedding),
       }))
       .sort((a, b) => b.score - a.score)
       .slice(0, limit);
 
-    return chunksWithScores.map(item => item.chunk);
+    return chunksWithScores.map((item) => item.chunk);
   }
 
   cosineSimilarity(a, b) {
@@ -110,8 +110,10 @@ export class MemStorage {
   }
 
   async getAllConversations() {
-    return Array.from(this.conversations.values()).sort((a, b) => 
-      new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime()
+    return Array.from(this.conversations.values()).sort(
+      (a, b) =>
+        new Date(b.lastMessageAt).getTime() -
+        new Date(a.lastMessageAt).getTime()
     );
   }
 
@@ -138,14 +140,17 @@ export class MemStorage {
       conversation.lastMessageAt = new Date();
       this.conversations.set(insertMessage.conversationId, conversation);
     }
-Q: Do you have a physical store?
+
     return message;
   }
 
   async getConversationMessages(conversationId) {
     return Array.from(this.messages.values())
-      .filter(message => message.conversationId === conversationId)
-      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+      .filter((message) => message.conversationId === conversationId)
+      .sort(
+        (a, b) =>
+          new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+      );
   }
 }
 
