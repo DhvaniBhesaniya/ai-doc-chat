@@ -4,7 +4,7 @@ import { randomUUID } from "crypto";
 import { storage } from "../storage.js";
 import { createEmbedding } from "./gemini.js";
 import { pineconeStore } from "./pineconeStore.js";
-import PDFParser from "pdf2json";
+import pdfParse from "pdf-parse/lib/pdf-parse.js";
 
 // Simple text splitter for chunking
 export class RecursiveCharacterTextSplitter {
@@ -92,81 +92,29 @@ export async function processPdfFile(fileBuffer, filename, originalName) {
     console.log("Document status updated successfully");
 
     // Extract text from PDF buffer using pdf-parser library
-    console.log("Extracting text from PDF using pdf-parser...");
+    console.log("Extracting text from PDF using pdf-parse...");
     let pdfText;
     
     try {
-      console.log("Parsing PDF with pdf-parser library...");
-      
-      // Create a new PDFParser instance
-      const pdfParser = new PDFParser();
-      
-      // Parse the PDF buffer
-      const pdfData = await new Promise((resolve, reject) => {
-        pdfParser.on("pdfParser_dataError", (errData) => {
-          console.error("PDF parsing error:", errData.parserError);
-          reject(new Error(errData.parserError));
-        });
-        
-        pdfParser.on("pdfParser_dataReady", (pdfData) => {
-          console.log("PDF data ready for processing");
-          resolve(pdfData);
-        });
-        
-        // Parse the buffer
-        pdfParser.parseBuffer(fileBuffer);
-      });
-      
+      const data = await pdfParse(fileBuffer);
       console.log("PDF parsing completed successfully");
-      console.log(`- Total pages: ${pdfData.Pages?.length || 0}`);
-      
-      // Extract text from all pages
-      let extractedText = '';
-      
-      if (pdfData.Pages && pdfData.Pages.length > 0) {
-        for (const page of pdfData.Pages) {
-          if (page.Texts && page.Texts.length > 0) {
-            for (const textItem of page.Texts) {
-              if (textItem.R && textItem.R.length > 0) {
-                for (const run of textItem.R) {
-                  if (run.T) {
-                    // Decode the text and clean it
-                    const decodedText = decodeURIComponent(run.T)
-                      .replace(/\s+/g, ' ')
-                      .trim();
-                    if (decodedText && decodedText.length > 1) {
-                      extractedText += decodedText + ' ';
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-        
-        // Clean the extracted text
-        extractedText = extractedText
-          .replace(/\s+/g, ' ')  // Normalize spaces
-          .replace(/([.!?])\s*([A-Z])/g, '$1\n\n$2')  // Add paragraph breaks
-          .trim();
-        
-        console.log(`Extracted text length: ${extractedText.length} characters`);
-        
-        if (extractedText && extractedText.length > 100) {
-          pdfText = extractedText;
-          console.log("Successfully extracted authentic PDF text content");
-          console.log("Content preview:", extractedText.substring(0, 500));
-          
-          // Update document with actual page count and progress
-          await storage.updateDocumentStatus(document.id, "processing", {
-            totalPages: pdfData.Pages.length,
-            progress: 15 // 15% - text extraction complete
-          });
-        } else {
-          throw new Error("Extracted text is too short or empty");
-        }
+      console.log(`- Total pages: ${data.numpages || 0}`);
+
+      let extractedText = (data.text || '').replace(/\s+/g, ' ').trim();
+      console.log(`Extracted text length: ${extractedText.length} characters`);
+
+      if (extractedText && extractedText.length > 100) {
+        pdfText = extractedText;
+        console.log("Successfully extracted authentic PDF text content");
+        console.log("Content preview:", extractedText.substring(0, 500));
+
+        // Update document with actual page count and progress
+        await storage.updateDocumentStatus(document.id, "processing", {
+          totalPages: data.numpages || 1,
+          progress: 15 // 15% - text extraction complete
+        });
       } else {
-        throw new Error("No pages found in PDF");
+        throw new Error("Extracted text is too short or empty");
       }
     } catch (parsingError) {
       console.error("PDF text extraction failed:", parsingError);
@@ -300,7 +248,7 @@ export async function processPdfFile(fileBuffer, filename, originalName) {
         // Continue anyway - we have local storage as fallback
       }
     }
-
+  
     // Update document as completed
     await storage.updateDocumentStatus(document.id, "completed", {
       totalPages: Math.ceil(chunks.length / 3),
@@ -308,7 +256,7 @@ export async function processPdfFile(fileBuffer, filename, originalName) {
       progress: 100
     });
     console.log(`✅ Document processing completed: ${originalName}`);
-
+  
     return document.id;
   } catch (error) {
     console.error("Error processing PDF:", error);
@@ -328,7 +276,7 @@ export async function processPdfFile(fileBuffer, filename, originalName) {
     return null;
   }
 }
-
+  
 export async function searchDocuments(query, limit = 5) {
   try {
     console.log("Searching documents with query:", query);
@@ -384,7 +332,7 @@ export async function searchDocuments(query, limit = 5) {
         };
       })
     );
-
+  
     const filteredResults = results.filter(result => result.document);
     console.log(`Returning ${filteredResults.length} results with documents`);
     

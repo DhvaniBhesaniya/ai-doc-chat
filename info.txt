@@ -33,3 +33,9 @@ PINECONE_API_KEY=pcsk_5qgPQD_5xjeTYfMntuTkAp9pA4ohU9ExVj2W1LHtid3P8mbZjfw5uyLZ5z
 
 https://app.pinecone.io/organizations/-OXMovdqDYeBOLj7jwO_/projects/f680aada-63d6-4579-a39b-db4697381226/indexes/ai-doc-chat/browser
 https://replit.com/@yegex62053/AISearchChat#.env.example
+
+
+
+
+
+Q: What are your delivery options and timelines?

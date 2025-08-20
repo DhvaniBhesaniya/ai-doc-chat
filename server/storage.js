@@ -138,7 +138,7 @@ export class MemStorage {
       conversation.lastMessageAt = new Date();
       this.conversations.set(insertMessage.conversationId, conversation);
     }
-
+Q: Do you have a physical store?
     return message;
   }
 
