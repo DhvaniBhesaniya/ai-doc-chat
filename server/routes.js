@@ -3,7 +3,7 @@ import multer from "multer";
 import { storage } from "./storage.js";
 import { processPdfFile, searchDocuments } from "./services/pdfProcessor.js";
 import { generateChatResponse, generateTitle } from "./services/gemini.js";
-import { vectorStore } from "./services/vectorStore.js";
+// import { vectorStore } from "./services/vectorStore.js"; // unused
 import { insertMessageSchema } from "../shared/schema.js";
 import { z } from "zod";
 
