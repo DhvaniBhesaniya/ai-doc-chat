@@ -152,7 +152,7 @@ class PineconeVectorStore {
     try {
       console.log(`Deleting vectors for document: ${documentId}`);
       
-      await this.index.deleteMany({
+      await this.index.delete({
         filter: {
           documentId: { "$eq": documentId }
         }
@@ -178,7 +178,7 @@ class PineconeVectorStore {
     try {
       console.log(`Deleting existing vectors for document: ${documentName}`);
       
-      await this.index.deleteMany({
+      await this.index.deleteAll({
         filter: {
           documentName: { "$eq": documentName }
         }

@@ -1,6 +1,6 @@
 import * as fs from "fs";
 import * as path from "path";
-import { randomUUID } from "crypto";
+import { randomUUID, createHash } from "crypto";
 import { storage } from "../storage.js";
 import { createEmbedding } from "./gemini.js";
 import { pineconeStore } from "./pineconeStore.js";
@@ -146,7 +146,7 @@ export async function processPdfFile(fileBuffer, filename, originalName) {
     console.log("Creating text splitter...");
     let chunks;
     try {
-      const textSplitter = new RecursiveCharacterTextSplitter(1000, 200);
+      const textSplitter = new RecursiveCharacterTextSplitter(1000, 100);
       console.log("Text splitter created, now splitting text...");
       chunks = textSplitter.splitText(pdfText);
       console.log("Text splitting completed successfully, chunks:", chunks.length);
@@ -170,29 +170,38 @@ export async function processPdfFile(fileBuffer, filename, originalName) {
     // Create chunks with embeddings and store in Pinecone
     const vectorsToUpsert = [];
     let chunkIndex = 0;
+    const seenHashes = new Set();
     
     for (const chunkText of chunks) {
       try {
         console.log(`Processing chunk ${chunkIndex + 1}/${chunks.length} with embedding`);
-        
+        const normalizedContent = chunkText.replace(/\s+/g, ' ').trim();
+        const contentHash = createHash('sha1').update(normalizedContent).digest('hex');
+        if (seenHashes.has(contentHash)) {
+          console.log(`Skipping duplicate chunk ${chunkIndex + 1} (hash ${contentHash.slice(0,8)})`);
+          chunkIndex++;
+          continue;
+        }
+        seenHashes.add(contentHash);
+
         // Generate real embeddings for the chunk content
-        const embedding = await createEmbedding(chunkText);
+        const embedding = await createEmbedding(normalizedContent);
         console.log(`Created embedding for chunk ${chunkIndex + 1}, dimension:`, embedding.length);
         
         // Create chunk ID
-        const chunkId = randomUUID();
+        const chunkId = `${document.id}-${contentHash}`;
         
         // Store chunk in local storage
         await storage.createDocumentChunk({
           id: chunkId,
           documentId: document.id,
           chunkIndex,
-          content: chunkText,
+          content: normalizedContent,
           pageNumber: Math.floor(chunkIndex / 3) + 1,
           embedding,
           metadata: { 
-            length: chunkText.length,
-            wordCount: chunkText.split(' ').length
+            length: normalizedContent.length,
+            wordCount: normalizedContent.split(' ').length
           }
         });
         
@@ -204,10 +213,10 @@ export async function processPdfFile(fileBuffer, filename, originalName) {
             documentId: document.id,
             documentName: document.originalName,
             chunkIndex,
-            content: chunkText,
+            content: normalizedContent,
             pageNumber: Math.floor(chunkIndex / 3) + 1,
-            chunkLength: chunkText.length,
-            wordCount: chunkText.split(' ').length
+            chunkLength: normalizedContent.length,
+            wordCount: normalizedContent.split(' ').length
           }
         });
         
