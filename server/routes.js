@@ -253,7 +253,7 @@ export async function registerRoutes(app) {
         createdAt: msg.createdAt,
       }));
       
-      console.log("Formatted messages------------:", formattedMessages);
+      console.log("Formatted messages------------:", JSON.stringify(formattedMessages));
       res.json(formattedMessages);
     } catch (error) {
       console.error("Error fetching messages:", error);
