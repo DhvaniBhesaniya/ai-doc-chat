@@ -2,12 +2,17 @@ import dotenv from "dotenv";
 // Fix the path - look for .env in the project root (one level up from server/)
 dotenv.config({ path: ".env" });
 import express from "express";
+import cookieParser from "cookie-parser";
+import { attachUser } from "./middleware/user.js";
 import { registerRoutes } from "./routes.js";
 import { setupVite, serveStatic, log } from "./vite.js";
+import { createMongoStorage, setStorage } from "./storage.js";
 
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
+app.use(cookieParser());
+app.use(attachUser);
 
 app.use((req, res, next) => {
   const start = Date.now();
@@ -40,6 +45,16 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // Initialize storage
+  try {
+    const mongoStorage = await createMongoStorage();
+    setStorage(mongoStorage);
+    log("MongoDB connected and storage initialized");
+  } catch (e) {
+    console.error("Failed to initialize MongoDB storage:", e.message);
+    process.exit(1);
+  }
+
   const server = await registerRoutes(app);
 
   app.use((err, _req, res, _next) => {
@@ -59,10 +74,6 @@ app.use((req, res, next) => {
     serveStatic(app);
   }
 
-  // ALWAYS serve the app on the port specified in the environment variable PORT
-  // Other ports are firewalled. Default to 5000 if not specified.
-  // this serves both the API and the client.
-  // It is the only port that is not firewalled.
   const port = parseInt(process.env.PORT || '5000', 10);
   server.listen({
     port,

@@ -8,7 +8,7 @@ import pdfParse from "pdf-parse/lib/pdf-parse.js";
 
 // Simple text splitter for chunking
 export class RecursiveCharacterTextSplitter {
-  constructor(chunkSize = 1000, chunkOverlap = 200) {
+  constructor(chunkSize = 1000, chunkOverlap = 100) {
     this.chunkSize = chunkSize;
     this.chunkOverlap = chunkOverlap;
   }
@@ -22,53 +22,25 @@ export class RecursiveCharacterTextSplitter {
 
     while (start < text.length && iterations < maxIterations) {
       iterations++;
-      console.log(`Iteration ${iterations}, start: ${start}, text length: ${text.length}`);
-      
       let end = Math.min(start + this.chunkSize, text.length);
-      console.log(`Initial end: ${end}`);
-      
-      // Try to break at sentence boundaries
       if (end < text.length) {
         const lastPeriod = text.lastIndexOf('.', end);
         const lastNewline = text.lastIndexOf('\n', end);
         const breakPoint = Math.max(lastPeriod, lastNewline);
-        console.log(`Break points - period: ${lastPeriod}, newline: ${lastNewline}, breakPoint: ${breakPoint}`);
-        
         if (breakPoint > start + this.chunkSize * 0.5) {
           end = breakPoint + 1;
-          console.log(`Adjusted end to: ${end}`);
         }
       }
-
       const chunk = text.slice(start, end).trim();
-      console.log(`Created chunk of length: ${chunk.length}`);
-      if (chunk.length > 0) {
-        chunks.push(chunk);
-        console.log(`Added chunk ${chunks.length}`);
-      }
-
-      const newStart = end - this.chunkOverlap;
-      console.log(`New start calculation: ${newStart} (end ${end} - overlap ${this.chunkOverlap})`);
-      start = Math.max(newStart, start + 1); // Ensure progress
-      console.log(`Final start: ${start}`);
-      
-      // Safety check for infinite loop
-      if (start >= text.length) {
-        console.log("Reached end of text");
-        break;
-      }
+      if (chunk.length > 0) chunks.push(chunk);
+      start = Math.max(end - this.chunkOverlap, start + 1);
+      if (start >= text.length) break;
     }
-
-    if (iterations >= maxIterations) {
-      console.warn("Text splitter hit max iterations safety limit");
-    }
-
-    console.log(`Text splitting completed with ${chunks.length} chunks in ${iterations} iterations`);
     return chunks;
   }
 }
 
-export async function processPdfFile(fileBuffer, filename, originalName) {
+export async function processPdfFile(fileBuffer, filename, originalName, userId) {
   let document;
   try {
     console.log(`Starting PDF processing for: ${originalName}`);
@@ -80,93 +52,61 @@ export async function processPdfFile(fileBuffer, filename, originalName) {
       fileSize: fileBuffer.length,
       mimeType: "application/pdf",
       status: "processing",
+      userId,
     });
 
     console.log(`Created document record with ID: ${document.id}`);
     
     // Update status to processing with initial progress
-    console.log("Updating document status to processing...");
-    await storage.updateDocumentStatus(document.id, "processing", {
-      progress: 5 // 5% - document created, starting processing
-    });
-    console.log("Document status updated successfully");
+    await storage.updateDocumentStatus(document.id, "processing", { progress: 5 });
 
-    // Extract text from PDF buffer using pdf-parser library
+    // Extract text from PDF buffer using pdf-parse
     console.log("Extracting text from PDF using pdf-parse...");
     let pdfText;
-    
     try {
       const data = await pdfParse(fileBuffer);
-      console.log("PDF parsing completed successfully");
-      console.log(`- Total pages: ${data.numpages || 0}`);
-
       let extractedText = (data.text || '').replace(/\s+/g, ' ').trim();
-      console.log(`Extracted text length: ${extractedText.length} characters`);
-
       if (extractedText && extractedText.length > 100) {
         pdfText = extractedText;
-        console.log("Successfully extracted authentic PDF text content");
-        console.log("Content preview:", extractedText.substring(0, 500));
-
-        // Update document with actual page count and progress
         await storage.updateDocumentStatus(document.id, "processing", {
           totalPages: data.numpages || 1,
-          progress: 15 // 15% - text extraction complete
+          progress: 15
         });
       } else {
         throw new Error("Extracted text is too short or empty");
       }
     } catch (parsingError) {
-      console.error("PDF text extraction failed:", parsingError);
-      console.error("Parsing error details:", parsingError.message);
-      console.error("Parsing error stack:", parsingError.stack);
-      
-      // Update document status to failed immediately
       await storage.updateDocumentStatus(document.id, "failed", { 
         error: `PDF parsing failed: ${parsingError.message}` 
       });
-      
-      // Re-throw the error to stop processing
       throw new Error(`PDF parsing failed for ${originalName}: ${parsingError.message}`);
     }
     
-    console.log("PDF content ready for processing, length:", pdfText.length);
-    console.log("Content preview:", pdfText.substring(0, 300));
-
-    // First, clean existing document data from Pinecone
-    console.log(`Cleaning existing data for document: ${originalName}`);
+    // Clean existing data only for this document ID
     try {
-      await pineconeStore.deleteVectorsByDocumentName(originalName);
-      console.log("Successfully cleaned existing document data from Pinecone");
-    } catch (cleanError) {
-      console.warn("Failed to clean existing data, continuing anyway:", cleanError.message);
-    }
+      await pineconeStore.deleteVectors(document.id);
+    } catch {}
+    try {
+      await storage.deleteDocumentChunks(document.id, userId);
+    } catch {}
 
     // Split text into chunks
-    console.log("Creating text splitter...");
     let chunks;
     try {
       const textSplitter = new RecursiveCharacterTextSplitter(1000, 100);
-      console.log("Text splitter created, now splitting text...");
       chunks = textSplitter.splitText(pdfText);
-      console.log("Text splitting completed successfully, chunks:", chunks.length);
     } catch (splitterError) {
-      console.error("Error during text splitting:", splitterError);
-      console.error("Splitter error stack:", splitterError.stack);
       throw splitterError;
     }
 
-    // Process each chunk and create embeddings
-    console.log(`Split text into ${chunks.length} chunks`);
-    
-    // Update document with chunk count and processing progress
+    // Update document with chunk count
     await storage.updateDocumentStatus(document.id, "processing", {
-      totalPages: await storage.getDocument(document.id).then(doc => doc.metadata?.totalPages || 1),
+      totalPages: await storage.getDocument(document.id).then(doc => doc?.metadata?.totalPages || 1),
       totalChunks: chunks.length,
       processedChunks: 0,
-      progress: 20 // 20% - text splitting complete
+      progress: 20
     });
-    
+
     // Create chunks with embeddings and store in Pinecone
     const vectorsToUpsert = [];
     let chunkIndex = 0;
@@ -174,25 +114,14 @@ export async function processPdfFile(fileBuffer, filename, originalName) {
     
     for (const chunkText of chunks) {
       try {
-        console.log(`Processing chunk ${chunkIndex + 1}/${chunks.length} with embedding`);
-        
         const normalizedContent = chunkText.replace(/\s+/g, ' ').trim();
         const contentHash = createHash('sha1').update(normalizedContent).digest('hex');
-        if (seenHashes.has(contentHash)) {
-          console.log(`Skipping duplicate chunk ${chunkIndex + 1} (hash ${contentHash.slice(0,8)})`);
-          chunkIndex++;
-          continue;
-        }
+        if (seenHashes.has(contentHash)) { chunkIndex++; continue; }
         seenHashes.add(contentHash);
 
-        // Generate real embeddings for the chunk content
         const embedding = await createEmbedding(normalizedContent);
-        console.log(`Created embedding for chunk ${chunkIndex + 1}, dimension:`, embedding.length);
-        
-        // Create chunk ID
         const chunkId = `${document.id}-${contentHash}`;
         
-        // Store chunk in local storage
         await storage.createDocumentChunk({
           id: chunkId,
           documentId: document.id,
@@ -200,13 +129,13 @@ export async function processPdfFile(fileBuffer, filename, originalName) {
           content: normalizedContent,
           pageNumber: Math.floor(chunkIndex / 3) + 1,
           embedding,
+          userId,
           metadata: { 
             length: normalizedContent.length,
             wordCount: normalizedContent.split(' ').length
           }
         });
         
-        // Prepare vector for Pinecone
         vectorsToUpsert.push({
           id: chunkId,
           values: embedding,
@@ -217,95 +146,55 @@ export async function processPdfFile(fileBuffer, filename, originalName) {
             content: normalizedContent,
             pageNumber: Math.floor(chunkIndex / 3) + 1,
             chunkLength: normalizedContent.length,
-            wordCount: normalizedContent.split(' ').length
+            wordCount: normalizedContent.split(' ').length,
+            userId,
           }
         });
         
-        console.log(`Successfully processed chunk ${chunkIndex + 1}/${chunks.length}`);
-        
-        // Update progress more frequently for better UX
-        const progress = Math.floor(((chunkIndex + 1) / chunks.length) * 80) + 10; // 10-90% for chunk processing
-        await storage.updateDocumentStatus(document.id, "processing", {
-          processedChunks: chunkIndex + 1,
-          progress: progress
-        });
-        console.log(`Progress: ${progress}% (${chunkIndex + 1}/${chunks.length} chunks)`);
-        
+        const progress = Math.floor(((chunkIndex + 1) / chunks.length) * 80) + 10;
+        await storage.updateDocumentStatus(document.id, "processing", { processedChunks: chunkIndex + 1, progress });
         chunkIndex++;
       } catch (error) {
-        console.error(`Error processing chunk ${chunkIndex}:`, error);
-        console.error("Chunk error details:", error.message);
         chunkIndex++;
       }
     }
     
-    // Upsert all vectors to Pinecone
     if (vectorsToUpsert.length > 0) {
       try {
-        console.log(`Upserting ${vectorsToUpsert.length} vectors to Pinecone`);
-        await storage.updateDocumentStatus(document.id, "processing", {
-          progress: 95 // 95% - uploading to Pinecone
-        });
-        
+        await storage.updateDocumentStatus(document.id, "processing", { progress: 95 });
         await pineconeStore.upsertVectors(vectorsToUpsert);
-        console.log("Successfully stored vectors in Pinecone");
-        
-        await storage.updateDocumentStatus(document.id, "processing", {
-          progress: 98 // 98% - upload complete
-        });
+        await storage.updateDocumentStatus(document.id, "processing", { progress: 98 });
       } catch (error) {
-        console.error("Failed to store vectors in Pinecone:", error);
-        // Continue anyway - we have local storage as fallback
+        // continue; we still have local storage
       }
     }
-  
-    // Update document as completed
+
     await storage.updateDocumentStatus(document.id, "completed", {
       totalPages: Math.ceil(chunks.length / 3),
       totalChunks: chunks.length,
       progress: 100
     });
-    console.log(`✅ Document processing completed: ${originalName}`);
-  
+
     return document.id;
   } catch (error) {
-    console.error("Error processing PDF:", error);
-    console.error("Full error details:", error.message, error.stack);
-    
-    // Update document status to failed if we have a document ID
     if (document && document.id) {
-      try {
-        await storage.updateDocumentStatus(document.id, "failed", { error: error.message });
-      } catch (updateError) {
-        console.error("Failed to update document status to failed:", updateError);
-      }
+      try { await storage.updateDocumentStatus(document.id, "failed", { error: error.message }); } catch {}
     }
-    
-    // Don't throw the error to prevent server crash
-    console.error(`PDF processing failed for: ${originalName}, but server continues running`);
     return null;
   }
 }
-  
-export async function searchDocuments(query, limit = 5) {
+
+export async function searchDocuments(query, limit = 5, documentName, userId) {
   try {
-    console.log("Searching documents with query:", query);
-    
-    // Create embedding for the query
     const queryEmbedding = await createEmbedding(query);
-    console.log("Query embedding created, dimension:", queryEmbedding.length);
-    
-    // Try Pinecone first, fallback to local storage
     let relevantChunks = [];
-    
     try {
-      console.log("Searching in Pinecone...");
-      const pineconeMatches = await pineconeStore.queryVectors(queryEmbedding, limit);
-      
+      const filter = {
+        ...(documentName ? { documentName: { "$eq": documentName } } : {}),
+        ...(userId ? { userId: { "$eq": userId } } : {}),
+      };
+      const pineconeMatches = await pineconeStore.queryVectors(queryEmbedding, limit, Object.keys(filter).length ? filter : null);
       if (pineconeMatches && pineconeMatches.length > 0) {
-        console.log(`Found ${pineconeMatches.length} matches from Pinecone`);
-        
-        // Convert Pinecone matches to our chunk format
         relevantChunks = pineconeMatches.map(match => ({
           id: match.id,
           documentId: match.metadata.documentId,
@@ -318,37 +207,32 @@ export async function searchDocuments(query, limit = 5) {
             wordCount: match.metadata.wordCount
           }
         }));
-        // console.log("Pinecone data------------:", relevantChunks);
-        
-        console.log("Pinecone results scores:", relevantChunks.map(c => c.score));
       } else {
-        console.log("No matches found in Pinecone, falling back to local search");
-        relevantChunks = await storage.searchChunksByEmbedding(queryEmbedding, limit);
+        relevantChunks = await storage.searchChunksByEmbedding(queryEmbedding, limit, userId);
+        if (documentName) {
+          const docs = await storage.getAllDocuments(userId);
+          const docIds = new Set(docs.filter(d => d.originalName === documentName).map(d => d.id));
+          relevantChunks = relevantChunks.filter(c => docIds.has(c.documentId));
+        }
       }
     } catch (pineconeError) {
-      console.warn("Pinecone search failed, using local fallback:", pineconeError.message);
-      relevantChunks = await storage.searchChunksByEmbedding(queryEmbedding, limit);
+      relevantChunks = await storage.searchChunksByEmbedding(queryEmbedding, limit, userId);
+      if (documentName) {
+        const docs = await storage.getAllDocuments(userId);
+        const docIds = new Set(docs.filter(d => d.originalName === documentName).map(d => d.id));
+        relevantChunks = relevantChunks.filter(c => docIds.has(c.documentId));
+      }
     }
-    
-    console.log(`Found ${relevantChunks.length} relevant chunks`);
-    
-    // Get document information for each chunk
+
     const results = await Promise.all(
       relevantChunks.map(async (chunk) => {
         const document = await storage.getDocument(chunk.documentId);
-        return {
-          chunk,
-          document,
-        };
+        return { chunk, document };
       })
     );
-  
-    const filteredResults = results.filter(result => result.document);
-    console.log(`Returning ${filteredResults.length} results with documents`);
-    
-    return filteredResults;
+
+    return results.filter(result => result.document);
   } catch (error) {
-    console.error("Error searching documents:", error);
     throw new Error(`Failed to search documents: ${error}`);
   }
 }
