@@ -13,10 +13,11 @@ export function useChat(conversationId) {
   });
 
   const sendMessageMutation = useMutation({
-    mutationFn: async ({ message, conversationId }) => {
+    mutationFn: async ({ message, conversationId, documentName }) => {
       const response = await apiRequest("POST", "/api/chat", {
         message,
         conversationId,
+        documentName,
       });
       return response.json();
     },
@@ -38,9 +39,9 @@ export function useChat(conversationId) {
     },
   });
 
-  const sendMessage = useCallback((message) => {
+  const sendMessage = useCallback((message, documentName) => {
     if (!message.trim()) return;
-    sendMessageMutation.mutate({ message: message.trim(), conversationId: currentConversationId });
+    sendMessageMutation.mutate({ message: message.trim(), conversationId: currentConversationId, documentName });
   }, [sendMessageMutation, currentConversationId]);
 
   const startNewConversation = useCallback(() => {

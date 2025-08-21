@@ -13,7 +13,7 @@ function SourceCitationCard({ source }) {
     >
       <p className="text-xs text-muted-foreground mb-2 flex items-center">
         <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 012 2h-3l-4 4z" />
         </svg>
         Source from {source.documentName}:
       </p>
@@ -130,35 +130,19 @@ function WelcomeSection({ onGetStarted }) {
         </p>
         
         <div className="grid md:grid-cols-3 gap-6">
-          {[
-            {
-              icon: (
+          {[{icon:(
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                 </svg>
-              ),
-              title: "Smart Upload",
-              description: "Drag & drop multiple PDFs with automatic text extraction"
-            },
-            {
-              icon: (
+              ),title:"Smart Upload",description:"Drag & drop multiple PDFs with automatic text extraction"},{icon:(
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                 </svg>
-              ),
-              title: "Semantic Search",
-              description: "Find relevant information using AI-powered understanding"
-            },
-            {
-              icon: (
+              ),title:"Semantic Search",description:"Find relevant information using AI-powered understanding"},{icon:(
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                 </svg>
-              ),
-              title: "Contextual Chat",
-              description: "Maintain conversation context with source citations"
-            }
-          ].map((feature, index) => (
+              ),title:"Contextual Chat",description:"Maintain conversation context with source citations"}].map((feature) => (
             <div
               key={feature.title}
               className="bg-muted/30 p-6 rounded-lg"
@@ -187,7 +171,7 @@ function WelcomeSection({ onGetStarted }) {
   );
 }
 
-export function ChatContainer() {
+export function ChatContainer({ selectedDocumentName }) {
   const { messages, isTyping, sendMessage, isLoading } = useChat();
   const { data: documents } = useDocuments();
   const [input, setInput] = useState("");
@@ -210,9 +194,8 @@ export function ChatContainer() {
 
   const handleSend = () => {
     if (!input.trim() || isLoading) return;
-    
     setShowWelcome(false);
-    sendMessage(input);
+    sendMessage(input, selectedDocumentName);
     setInput("");
   };
 
@@ -236,7 +219,6 @@ export function ChatContainer() {
       <ScrollArea className="flex-1" data-testid="chat-messages">
         <div className="min-h-full flex flex-col">
           {showWelcome && <WelcomeSection onGetStarted={handleGetStarted} />}
-          
           <div className="flex-1 px-6 pb-6">
             <div className="space-y-4">
               {messages.map((message) => (
@@ -246,7 +228,6 @@ export function ChatContainer() {
                   isUser={message.role === "user"}
                 />
               ))}
-              
               {isTyping && <TypingIndicator />}
             </div>
             <div ref={messagesEndRef} />
@@ -263,11 +244,14 @@ export function ChatContainer() {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyPress}
-                placeholder="Ask anything about your documents..."
+                placeholder={`Ask about ${selectedDocumentName || 'your documents'}...`}
                 className="w-full bg-transparent text-foreground placeholder-muted-foreground resize-none focus:outline-none border-0 shadow-none min-h-[24px] max-h-32"
                 rows={1}
                 data-testid="chat-input"
               />
+              {selectedDocumentName && (
+                <div className="text-xs text-muted-foreground mt-1">Using document: <span className="font-medium">{selectedDocumentName}</span></div>
+              )}
             </div>
             <div className="flex items-center space-x-2">
               <Button

@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
-function DocumentItem({ document }) {
+function DocumentItem({ document, isSelected, onSelect }) {
   const deleteMutation = useDeleteDocument();
 
   const getStatusBadge = (status) => {
@@ -22,17 +22,14 @@ function DocumentItem({ document }) {
   };
 
   const getProgressWidth = (status, progress) => {
-    // Use actual progress value if available
     if (progress && typeof progress === 'number') {
       return `${Math.min(100, Math.max(0, progress))}%`;
     }
-    
-    // Fallback to status-based progress
     switch (status) {
       case "completed":
         return "100%";
       case "processing":
-        return "50%"; // Default processing progress
+        return "50%";
       case "uploading":
         return "25%";
       case "failed":
@@ -64,11 +61,12 @@ function DocumentItem({ document }) {
 
   return (
     <div
-      className="bg-card border border-border rounded-lg p-4 hover:shadow-sm transition-shadow"
+      className={`bg-card border rounded-lg p-4 hover:shadow-sm transition-shadow cursor-pointer ${isSelected ? 'border-primary ring-2 ring-primary/30' : 'border-border'}`}
       data-testid={`document-item-${document.id}`}
+      onClick={() => onSelect?.(document.filename)}
     >
       <div className="flex items-center space-x-3">
-        <div className="w-10 h-10 bg-red-500 rounded-lg flex items-center justify-center flex-shrink-0">
+        <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${isSelected ? 'ai-gradient text-white' : 'bg-red-500'}`}>
           <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24">
             <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z" />
           </svg>
@@ -86,7 +84,7 @@ function DocumentItem({ document }) {
           variant="ghost"
           size="sm"
           className="text-muted-foreground hover:text-destructive transition-colors p-2 h-auto"
-          onClick={() => deleteMutation.mutate(document.id)}
+          onClick={(e) => { e.stopPropagation(); deleteMutation.mutate(document.id); }}
           disabled={deleteMutation.isPending}
           data-testid={`delete-document-${document.id}`}
         >
@@ -118,7 +116,7 @@ function DocumentItem({ document }) {
   );
 }
 
-export function DocumentSidebar({ isOpen, onClose }) {
+export function DocumentSidebar({ isOpen, onClose, selectedDocumentName, onSelectDocument }) {
   const { data: documents, isLoading, error } = useDocuments();
 
   if (!isOpen) return null;
@@ -195,7 +193,7 @@ export function DocumentSidebar({ isOpen, onClose }) {
             )}
 
             {documents?.map((document) => (
-              <DocumentItem key={document.id} document={document} />
+              <DocumentItem key={document.id} document={document} isSelected={document.filename === selectedDocumentName} onSelect={onSelectDocument} />
             ))}
           </div>
         </ScrollArea>
