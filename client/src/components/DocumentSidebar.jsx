@@ -5,6 +5,21 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
+function formatFileSize(bytes) {
+  if (bytes === undefined || bytes === null) return "";
+  const thresh = 1024;
+  if (bytes < thresh) return `${bytes} B`;
+  const units = ["KB", "MB", "GB", "TB"]; 
+  let u = -1;
+  let value = bytes;
+  do {
+    value /= thresh;
+    u++;
+  } while (value >= thresh && u < units.length - 1);
+  const decimals = value < 10 ? 2 : 1;
+  return `${value.toFixed(decimals)} ${units[u]}`;
+}
+
 function DocumentItem({ document, isSelected, onSelect }) {
   const deleteMutation = useDeleteDocument();
 
@@ -40,7 +55,10 @@ function DocumentItem({ document, isSelected, onSelect }) {
     }
   };
 
-  const getStatusText = (status, progress, error) => {
+  const getStatusText = (status, progress, error, stage) => {
+    if (stage && (status === "processing" || status === "uploading")) {
+      return stage;
+    }
     if (status === "processing" && progress) {
       return `Processing... ${progress}%`;
     }
@@ -53,6 +71,9 @@ function DocumentItem({ document, isSelected, onSelect }) {
         return "Uploading...";
       case "failed":
       case "error":
+        if (error && error.length > 50) {
+          return "Processing failed - hover for details";
+        }
         return error ? `Failed: ${error}` : "Failed";
       default:
         return "Pending";
@@ -61,53 +82,99 @@ function DocumentItem({ document, isSelected, onSelect }) {
 
   return (
     <div
-      className={`bg-card border rounded-lg p-4 hover:shadow-sm transition-shadow cursor-pointer ${isSelected ? 'border-primary ring-2 ring-primary/30' : 'border-border'}`}
+      className={`relative bg-card border rounded-xl p-3 hover:shadow-md transition-all duration-200 cursor-pointer group w-full overflow-hidden box-border min-h-[84px] ${
+        isSelected 
+          ? 'border-primary bg-primary/5 shadow-sm' 
+          : document.status === 'error' 
+            ? 'border-destructive/50 bg-destructive/5'
+            : 'border-border hover:border-primary/50'
+      }`}
       data-testid={`document-item-${document.id}`}
-      onClick={() => onSelect?.(document.filename)}
+      onClick={() => onSelect?.(document.originalName || document.filename)}
     >
-      <div className="flex items-center space-x-3">
-        <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${isSelected ? 'ai-gradient text-white' : 'bg-red-500'}`}>
-          <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24">
+      {/* Delete Button - Always visible in top right */}
+      <Button
+        variant="ghost"
+        size="sm"
+        className="absolute top-1.5 right-2 z-10 w-7 h-7 p-0 rounded-full bg-background/90 backdrop-blur-sm hover:bg-destructive hover:text-destructive-foreground transition-all duration-200 opacity-80 hover:opacity-100 group-hover:opacity-100 shadow-sm"
+        onClick={(e) => { e.stopPropagation(); deleteMutation.mutate(document.id); }}
+        disabled={deleteMutation.isPending}
+        data-testid={`delete-document-${document.id}`}
+        title="Delete document"
+      >
+        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </Button>
+
+      <div className="flex items-start space-x-2.5 pr-10 min-w-0">
+        <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 transition-all duration-200 ${
+          isSelected 
+            ? 'ai-gradient text-white shadow-md' 
+            : document.status === 'error'
+              ? 'bg-destructive text-destructive-foreground'
+              : document.status === 'completed'
+                ? 'bg-green-500 text-white'
+                : document.status === 'processing'
+                  ? 'bg-amber-500 text-white'
+                  : 'bg-muted text-muted-foreground'
+        }`}>
+          <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
             <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z" />
           </svg>
         </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-foreground truncate" title={document.filename}>
-            {document.filename}
+        
+        <div className="flex-1 min-w-0 space-y-1">
+          <p className="text-sm font-semibold text-foreground leading-tight" title={document.originalName || document.filename}>
+            <span className="block min-w-0 max-w-full truncate">
+              {document.originalName || document.filename}
+            </span>
           </p>
-          <p className="text-xs text-muted-foreground">
-            {document.fileSize ? (document.fileSize / (1024 * 1024)).toFixed(1) : '0.0'} MB
+          <p className="text-xs text-muted-foreground leading-relaxed whitespace-nowrap overflow-hidden text-ellipsis">
+            {document.fileSize !== undefined && document.fileSize !== null ? formatFileSize(document.fileSize) : ''}
             {document.totalPages && ` • ${document.totalPages} pages`}
+            {document.totalChunks && ` • ${document.totalChunks} chunks`}
           </p>
         </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="text-muted-foreground hover:text-destructive transition-colors p-2 h-auto"
-          onClick={(e) => { e.stopPropagation(); deleteMutation.mutate(document.id); }}
-          disabled={deleteMutation.isPending}
-          data-testid={`delete-document-${document.id}`}
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </Button>
       </div>
       
-      <div className="mt-3">
-        <div className="w-full bg-muted rounded-full h-2">
+      <div className="mt-4 space-y-2">
+        {/* Progress Bar */}
+        <div className="w-full bg-muted/50 rounded-full h-2 overflow-hidden">
           <div
-            className={`h-2 rounded-full transition-all duration-300 ${getStatusBadge(document.status)}`}
+            className={`h-full rounded-full transition-all duration-500 ease-out ${
+              getStatusBadge(document.status)
+            }`}
             style={{ width: getProgressWidth(document.status, document.metadata?.progress) }}
           />
         </div>
-        <div className="flex justify-between items-center mt-2">
-          <span className="text-xs text-muted-foreground">
-            {getStatusText(document.status, document.metadata?.progress, document.metadata?.error)}
+        
+        {/* Status and Progress */}
+        <div className="flex justify-between items-center">
+          <span 
+            className={`text-xs font-medium truncate max-w-[150px] ${
+              document.status === 'error' 
+                ? 'text-destructive' 
+                : document.status === 'completed'
+                  ? 'text-green-600 dark:text-green-400'
+                  : document.status === 'processing'
+                    ? 'text-amber-600 dark:text-amber-400'
+                    : 'text-muted-foreground'
+            }`}
+            title={document.metadata?.error && document.metadata.error.length > 50 ? document.metadata.error : undefined}
+          >
+            {getStatusText(document.status, document.metadata?.progress, document.metadata?.error, document.metadata?.stage)}
           </span>
-          {document.totalChunks && (
-            <span className="text-xs text-muted-foreground">
-              {document.totalChunks} chunks
+          
+          {document.metadata?.progress && document.status !== "completed" && document.status !== "error" && (
+            <span className="text-xs font-semibold text-primary bg-primary/10 px-2 py-0.5 rounded-full">
+              {document.metadata.progress}%
+            </span>
+          )}
+          
+          {document.status === 'completed' && (
+            <span className="text-xs font-semibold text-green-600 dark:text-green-400 bg-green-500/10 px-2 py-0.5 rounded-full">
+              ✓ Ready
             </span>
           )}
         </div>
@@ -132,7 +199,7 @@ export function DocumentSidebar({ isOpen, onClose, selectedDocumentName, onSelec
       
       {/* Sidebar */}
       <aside
-        className="fixed left-0 top-16 bottom-0 w-80 z-50 lg:static lg:z-auto flex flex-col bg-background border-r border-border"
+        className="fixed left-0 top-16 bottom-0 w-80 z-50 lg:static lg:z-auto flex flex-col bg-background border-r border-border overflow-hidden"
         data-testid="document-sidebar"
       >
         <div className="p-6 border-b border-border">
@@ -154,8 +221,8 @@ export function DocumentSidebar({ isOpen, onClose, selectedDocumentName, onSelec
           <FileUpload />
         </div>
 
-        <ScrollArea className="flex-1 p-6">
-          <div className="space-y-3" data-testid="document-list">
+        <ScrollArea className="flex-1 p-4">
+          <div className="space-y-3 max-w-full" data-testid="document-list">
             {isLoading && (
               <div className="space-y-3">
                 {[...Array(3)].map((_, i) => (

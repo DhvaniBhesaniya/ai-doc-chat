@@ -1,19 +1,28 @@
 import dotenv from "dotenv";
-// Fix the path - look for .env in the project root (one level up from server/)
 dotenv.config({ path: ".env" });
+
 import express from "express";
+import { createServer } from "http";
 import cookieParser from "cookie-parser";
 import { attachUser } from "./middleware/user.js";
-import { registerRoutes } from "./routes.js";
-import { setupVite, serveStatic, log } from "./vite.js";
-import { createMongoStorage, setStorage } from "./storage.js";
+import { setupVite, serveStatic } from "./vite.js";
+import { initializeStorage } from "./config/database.js";
+import { log } from "./utils/logger.js";
+
+// Import routes
+import authRoutes from "./routes/authRoutes.js";
+import documentRoutes from "./routes/documentRoutes.js";
+import chatRoutes from "./routes/chatRoutes.js";
 
 const app = express();
+
+// Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
 app.use(attachUser);
 
+// Request logging middleware
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
@@ -44,42 +53,54 @@ app.use((req, res, next) => {
   next();
 });
 
+// API Routes
+app.use("/api/auth", authRoutes);
+app.use("/api/documents", documentRoutes);
+app.use("/api/chat", chatRoutes);
+
+// Legacy upload endpoint redirect
+app.all("/api/upload", (req, res) => {
+  res.status(404).json({
+    error: "Upload endpoint moved to /api/documents/upload",
+  });
+});
+
+// Error handling middleware
+app.use((err, _req, res, _next) => {
+  const status = err.status || err.statusCode || 500;
+  const message = err.message || "Internal Server Error";
+  res.status(status).json({ message });
+  throw err;
+});
+
+// Server initialization
 (async () => {
-  // Initialize storage
   try {
-    const mongoStorage = await createMongoStorage();
-    setStorage(mongoStorage);
-    log("MongoDB connected and storage initialized");
-  } catch (e) {
-    console.error("Failed to initialize MongoDB storage:", e.message);
+    // Initialize storage
+    await initializeStorage();
+
+    // Create HTTP server
+    const server = createServer(app);
+    const port = parseInt(process.env.PORT || "5001", 10);
+    server.listen(
+      {
+        port,
+        host: "0.0.0.0",
+        reusePort: true,
+      },
+      () => {
+        log(`serving on port ${port}`);
+      },
+    );
+
+    // Setup Vite in development
+    if (app.get("env") === "development") {
+      await setupVite(app, server);
+    } else {
+      serveStatic(app);
+    }
+  } catch (error) {
+    console.error("Failed to start server:", error);
     process.exit(1);
   }
-
-  const server = await registerRoutes(app);
-
-  app.use((err, _req, res, _next) => {
-    const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
-
-    res.status(status).json({ message });
-    throw err;
-  });
-
-  // importantly only setup vite in development and after
-  // setting up all the other routes so the catch-all route
-  // doesn't interfere with the other routes
-  if (app.get("env") === "development") {
-    await setupVite(app, server);
-  } else {
-    serveStatic(app);
-  }
-
-  const port = parseInt(process.env.PORT || '5000', 10);
-  server.listen({
-    port,
-    host: "0.0.0.0",
-    reusePort: true,
-  }, () => {
-    log(`serving on port ${port}`);
-  });
 })();

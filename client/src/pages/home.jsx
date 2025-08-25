@@ -1,18 +1,24 @@
 import React, { useState, useEffect } from "react";
+import { Link } from "wouter";
 import { DocumentSidebar } from "@/components/DocumentSidebar.jsx";
 import { ChatContainer } from "@/components/ChatContainer.jsx";
 import { useTheme } from "@/components/ThemeProvider.jsx";
 import { Button } from "@/components/ui/button";
 import { useDocuments } from "@/hooks/useDocuments.js";
+import { useAuth } from "@/hooks/useAuth.js";
 import LoadingOverlay from "@/components/LoadingOverlay.jsx";
+import Login from "@/pages/Login.jsx";
 import UserMenu from "@/components/UserMenu.jsx";
+import { User } from "lucide-react";
 
 export default function Home() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { theme, toggleTheme } = useTheme();
+  const { user, isLoading, isAuthenticated } = useAuth();
   const { data: documents } = useDocuments();
   const [selectedDocumentName, setSelectedDocumentName] = useState("");
 
+  // Move useEffect BEFORE any conditional returns
   useEffect(() => {
     if (!documents || documents.length === 0) return;
     if (!selectedDocumentName) {
@@ -23,7 +29,23 @@ export default function Home() {
         setSelectedDocumentName(documents[0].filename);
       }
     }
-  }, [documents]);
+  }, [documents, selectedDocumentName]);
+
+  // Show login page if not authenticated - AFTER all hooks
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <Login />;
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -41,6 +63,14 @@ export default function Home() {
               <h1 className="text-xl font-bold text-foreground">AI DocChat</h1>
             </div>
             <div className="flex items-center space-x-4">
+              {/* User Profile Button */}
+              <Link href="/profile">
+                <Button variant="ghost" size="sm" className="flex items-center gap-2">
+                  <User className="h-4 w-4" />
+                  <span className="hidden sm:inline">{user?.name || "Profile"}</span>
+                </Button>
+              </Link>
+              
               {/* Dark Mode Toggle */}
               <button
                 onClick={toggleTheme}
@@ -84,8 +114,8 @@ export default function Home() {
         <ChatContainer selectedDocumentName={selectedDocumentName} />
       </div>
 
-      {/* Mobile Sidebar Toggle - Vertical Column Layout */}
-      <div className="fixed left-0 top-1/2 transform -translate-y-1/2 lg:hidden z-50 flex flex-col items-center space-y-4 bg-background/95 backdrop-blur-sm border-r border-border rounded-r-lg shadow-lg p-3 mobile-sidebar-toggle">
+      {/* Mobile Sidebar Toggle - Vertical Column Layout - Hidden when sidebar is open */}
+      <div className={`fixed left-0 top-1/2 transform -translate-y-1/2 lg:hidden z-50 flex flex-col items-center space-y-4 bg-background/95 backdrop-blur-sm border-r border-border rounded-r-lg shadow-lg p-3 mobile-sidebar-toggle transition-all duration-300 ${sidebarOpen ? 'opacity-0 pointer-events-none -translate-x-full' : 'opacity-100'}`}>
         <button
           className="btn-ai p-3 rounded-lg shadow-md hover:shadow-lg transition-all duration-200"
           onClick={() => setSidebarOpen(true)}

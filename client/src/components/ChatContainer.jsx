@@ -65,7 +65,7 @@ function MessageBubble({ message, isUser }) {
               
               {message.sources && message.sources.length > 0 && (
                 <div className="mt-4 space-y-2">
-                  {message.sources.map((source, index) => (
+                  {message.sources.slice(0, 3).map((source, index) => (
                     <SourceCitationCard key={index} source={source} />
                   ))}
                 </div>
@@ -219,7 +219,7 @@ export function ChatContainer({ selectedDocumentName }) {
       <ScrollArea className="flex-1" data-testid="chat-messages">
         <div className="min-h-full flex flex-col">
           {showWelcome && <WelcomeSection onGetStarted={handleGetStarted} />}
-          <div className="flex-1 px-6 pb-6">
+          <div className="flex-1 px-6 pb-6 max-h-[calc(100vh-16rem)] overflow-y-auto">
             <div className="space-y-4">
               {messages.map((message) => (
                 <MessageBubble

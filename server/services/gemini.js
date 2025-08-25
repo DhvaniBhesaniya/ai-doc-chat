@@ -1,6 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
+import { storage } from "../models/storage.js";
+import { pineconeStore } from "./pineconeStore.js";
 
-// Remove the top-level initialization
 let ai = null;
 
 // Initialize function that will be called when needed
@@ -62,39 +63,52 @@ export async function createEmbedding(text) {
   }
 }
 
-export async function generateChatResponse(query, context, sources) {
+export async function generateChatResponse(query, userId, selectedDocumentName = null) {
   try {
-    // Initialize if not already done
     await initializeGemini();
     
     if (!ai) {
       throw new Error("GoogleGenAI client not initialized");
     }
+
+    // Search for relevant document chunks in Pinecone
+    const queryEmbedding = await createEmbedding(query);
     
-    // Check if we have sufficient context
-    if (!context || context.trim().length === 0) {
-      return "I'm sorry, but I don't know the answer. The information is not available in the document.";
+    // Create filter for specific document if selected
+    let filter = null;
+    if (selectedDocumentName) {
+      filter = { documentName: selectedDocumentName };
+      console.log(`Filtering search results to document: ${selectedDocumentName}`);
     }
     
-    const systemPrompt = `You are an AI assistant that helps users understand their documents. 
-    You will be provided with a user query and relevant context from their uploaded documents.
+    const searchResults = await pineconeStore.queryVectors(queryEmbedding, 5, filter);
     
-    Instructions:
-    1. Answer the query ONLY based on the provided context from the documents
-    2. DO NOT use external knowledge or information not present in the context
-    3. If the context doesn't contain enough information to answer the query, respond exactly with: "I'm sorry, but I don't know the answer. The information is not available in the document."
-    4. When you can answer, be helpful, accurate, and concise
-    5. Reference specific parts of the documents when applicable
-    6. Include source citations when possible`;
+    if (!searchResults || searchResults.length === 0) {
+      return {
+        content: "I'm sorry, but I don't know the answer. The information is not available in the document.",
+        sources: []
+      };
+    }
+
+    // Extract content and metadata from Pinecone results
+    const context = searchResults.map(result => result.metadata.content).join('\n\n');
+    const sources = searchResults.map(result => ({
+      documentId: result.metadata.documentId,
+      documentName: result.metadata.documentName || 'Unknown Document',
+      pageNumber: result.metadata.pageNumber || 1,
+      excerpt: result.metadata.content.substring(0, 200) + "..."
+    }));
+
+    const systemPrompt = `You are an AI assistant that helps users understand their documents. 
+    Answer queries ONLY based on the provided context from the documents.
+    If the context doesn't contain enough information, respond exactly with: "I'm sorry, but I don't know the answer. The information is not available in the document."`;
 
     const userPrompt = `Query: ${query}
 
 Context from documents:
 ${context}
 
-Sources: ${sources ? sources.map(s => `${s.document} (Page ${s.page})`).join(', ') : 'N/A'}
-
-Please provide a helpful answer based ONLY on the context above. If the context doesn't contain sufficient information to answer the question, respond with the fallback message.`;
+Please provide a helpful answer based ONLY on the context above.`;
 
     const response = await ai.models.generateContent({
       model: "gemini-2.0-flash-exp",
@@ -104,16 +118,10 @@ Please provide a helpful answer based ONLY on the context above. If the context 
 
     const generatedText = response.text || "I apologize, but I couldn't generate a response at this time.";
     
-    // Additional check for relevance - if response is too generic, use fallback
-    if (generatedText.length < 50 || 
-        generatedText.toLowerCase().includes("i don't have") ||
-        generatedText.toLowerCase().includes("i cannot") ||
-        generatedText.toLowerCase().includes("not available in") ||
-        generatedText.toLowerCase().includes("no information")) {
-      return "I'm sorry, but I don't know the answer. The information is not available in the document.";
-    }
-    
-    return generatedText;
+    return {
+      content: generatedText,
+      sources
+    };
   } catch (error) {
     console.error("Error generating chat response:", error);
     throw new Error(`Failed to generate response: ${error.message}`);

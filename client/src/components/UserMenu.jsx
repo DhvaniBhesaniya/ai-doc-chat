@@ -1,12 +1,11 @@
 import React from "react";
-import { useCurrentUser, useLogout } from "@/hooks/useAuth.js";
+import { useAuth } from "@/hooks/useAuth.js";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Link } from "wouter";
 
 export default function UserMenu() {
-  const { data: user } = useCurrentUser();
-  const logout = useLogout();
+  const { user, logout } = useAuth();
 
   if (!user) {
     return (
@@ -40,7 +39,7 @@ export default function UserMenu() {
         <DropdownMenuItem disabled>Settings</DropdownMenuItem>
         <DropdownMenuItem disabled>Profile</DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={() => logout.mutate()} className="text-destructive">Logout</DropdownMenuItem>
+        <DropdownMenuItem onClick={logout} className="text-destructive">Logout</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );

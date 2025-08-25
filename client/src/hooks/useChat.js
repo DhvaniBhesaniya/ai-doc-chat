@@ -7,10 +7,12 @@ export function useChat(conversationId) {
   const [isTyping, setIsTyping] = useState(false);
   const [currentConversationId, setCurrentConversationId] = useState(conversationId);
 
-  const { data: messages = [], refetch: refetchMessages } = useQuery({
-    queryKey: ["/api/conversations", currentConversationId, "messages"],
+  const { data: conversationData, refetch: refetchMessages } = useQuery({
+    queryKey: ["/api/chat/conversations", currentConversationId],
     enabled: !!currentConversationId,
   });
+
+  const messages = conversationData?.messages || [];
 
   const sendMessageMutation = useMutation({
     mutationFn: async ({ message, conversationId, documentName }) => {
