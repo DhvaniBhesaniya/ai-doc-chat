@@ -82,13 +82,14 @@ function DocumentItem({ document, isSelected, onSelect }) {
 
   return (
     <div
-      className={`relative bg-card border rounded-xl p-3 hover:shadow-md transition-all duration-200 cursor-pointer group w-full overflow-hidden box-border min-h-[84px] ${
+      className={`relative bg-card border rounded-xl p-3 hover:shadow-md transition-all duration-200 cursor-pointer group overflow-hidden min-h-[84px] ${
         isSelected 
           ? 'border-primary bg-primary/5 shadow-sm' 
           : document.status === 'error' 
             ? 'border-destructive/50 bg-destructive/5'
             : 'border-border hover:border-primary/50'
       }`}
+      style={{ width: '100%', maxWidth: '285px' }}
       data-testid={`document-item-${document.id}`}
       onClick={() => onSelect?.(document.originalName || document.filename)}
     >
@@ -107,7 +108,7 @@ function DocumentItem({ document, isSelected, onSelect }) {
         </svg>
       </Button>
 
-      <div className="flex items-start space-x-2.5 pr-10 min-w-0">
+      <div className="flex items-start space-x-2.5 pr-10 min-w-0" style={{ maxWidth: '100%' }}>
         <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 transition-all duration-200 ${
           isSelected 
             ? 'ai-gradient text-white shadow-md' 
@@ -125,15 +126,13 @@ function DocumentItem({ document, isSelected, onSelect }) {
         </div>
         
         <div className="flex-1 min-w-0 space-y-1">
-          <p className="text-sm font-semibold text-foreground leading-tight" title={document.originalName || document.filename}>
-            <span className="block min-w-0 max-w-full truncate">
-              {document.originalName || document.filename}
-            </span>
+          <p className="text-sm font-semibold text-foreground leading-tight break-words break-all" title={document.originalName || document.filename}>
+            {document.originalName || document.filename}
           </p>
-          <p className="text-xs text-muted-foreground leading-relaxed whitespace-nowrap overflow-hidden text-ellipsis">
+          <p className="text-xs text-muted-foreground leading-relaxed truncate">
             {document.fileSize !== undefined && document.fileSize !== null ? formatFileSize(document.fileSize) : ''}
             {document.totalPages && ` • ${document.totalPages} pages`}
-            {document.totalChunks && ` • ${document.totalChunks} chunks`}
+            {/* {document.totalChunks && ` • ${document.totalChunks} chunks`} */}
           </p>
         </div>
       </div>
@@ -222,7 +221,7 @@ export function DocumentSidebar({ isOpen, onClose, selectedDocumentName, onSelec
         </div>
 
         <ScrollArea className="flex-1 p-4">
-          <div className="space-y-3 max-w-full" data-testid="document-list">
+          <div className="space-y-3 w-full" data-testid="document-list">
             {isLoading && (
               <div className="space-y-3">
                 {[...Array(3)].map((_, i) => (
