@@ -198,7 +198,7 @@ export function DocumentSidebar({ isOpen, onClose, selectedDocumentName, onSelec
       
       {/* Sidebar */}
       <aside
-        className="fixed left-0 top-16 bottom-0 w-80 z-50 lg:static lg:z-auto flex flex-col bg-background border-r border-border overflow-hidden"
+        className="fixed left-0 top-16 bottom-0 w-80 z-50 lg:sticky lg:top-16 lg:h-[calc(100vh-4rem)] lg:z-auto flex flex-col bg-background border-r border-border overflow-hidden"
         data-testid="document-sidebar"
       >
         <div className="p-6 border-b border-border">
